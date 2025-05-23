@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
+const { ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -72,6 +73,26 @@ async function run() {
         });
       }
     });
+
+    //delete group
+    app.delete("/delete-group/:id", async (req, res) => {
+      try {
+        const groupId = req.params.id;
+        const result = await groupCollection.deleteOne({ _id: new ObjectId(groupId) });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).json({
+            error: "Group not found",
+          });
+        }
+      }
+      catch (error) {
+        console.error("Error deleting group:", error);
+        res.status(500).json({
+          error: "Internal server error",
+        });
+      }
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
