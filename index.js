@@ -11,7 +11,6 @@ app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.jlzgpsq.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -23,7 +22,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const groupCollection = client.db("hobbyHub").collection("groups");
 
@@ -75,7 +74,6 @@ async function run() {
     });
 
     // my group
-
     // Get groups by user email
     // app.get("/my-groups", async (req, res) => {
     //   try {
@@ -97,26 +95,25 @@ async function run() {
     app.put("/update-group/:id", async (req, res) => {
       try {
         const groupId = req.params.id;
-        
-        // First get the existing group
-        const existingGroup = await groupCollection.findOne({ _id: new ObjectId(groupId) });
-        
+
+        const existingGroup = await groupCollection.findOne({
+          _id: new ObjectId(groupId),
+        });
+
         if (!existingGroup) {
           return res.status(404).json({ error: "Group not found" });
         }
 
-        // Prepare update data while preserving existing fields
         const updatedData = {
           ...existingGroup,
           ...req.body,
-          _id: new ObjectId(groupId), // Ensure _id remains unchanged
+          _id: new ObjectId(groupId),
           startDate: new Date(req.body.startDate || existingGroup.startDate),
           endDate: new Date(req.body.endDate || existingGroup.endDate),
           maxMembers: parseInt(req.body.maxMembers || existingGroup.maxMembers),
-          updatedAt: new Date() // Add update timestamp
+          updatedAt: new Date(),
         };
 
-        // Remove _id from update operation
         delete updatedData._id;
 
         const result = await groupCollection.updateOne(
@@ -127,20 +124,19 @@ async function run() {
         if (result.modifiedCount === 1) {
           res.json({
             success: true,
-            message: "Group updated successfully"
+            message: "Group updated successfully",
           });
         } else {
           res.status(400).json({
             success: false,
-            error: "Failed to update group"
+            error: "Failed to update group",
           });
         }
-
       } catch (error) {
         console.error("Error updating group:", error);
         res.status(500).json({
           success: false,
-          error: "Internal server error"
+          error: "Internal server error",
         });
       }
     });
@@ -168,11 +164,96 @@ async function run() {
       }
     });
 
+    // Join group
+    app.post("/join-group/:id", async (req, res) => {
+      try {
+        const groupId = req.params.id;
+        const { userEmail, userName } = req.body;
+
+        if (!userEmail || !userName) {
+          return res.status(400).json({
+            success: false,
+            error: "User email and name are required"
+          });
+        }
+
+        const group = await groupCollection.findOne({ _id: new ObjectId(groupId) });
+
+        if (!group) {
+          return res.status(404).json({
+            success: false,
+            error: "Group not found"
+          });
+        }
+
+        // Check if start date has passed
+        const currentDate = new Date();
+        const groupStartDate = new Date(group.startDate);
+
+        if (currentDate > groupStartDate) {
+          return res.status(400).json({
+            success: false,
+            error: "This group is no longer active as the start date has passed"
+          });
+        }
+
+        // Check if group is full
+        if (group.members && group.members.length >= group.maxMembers) {
+          return res.status(400).json({
+            success: false,
+            error: "This group has reached its maximum member limit"
+          });
+        }
+
+        // Check if user is already a member
+        if (group.members && group.members.some(member => member.userEmail === userEmail)) {
+          return res.status(400).json({
+            success: false,
+            error: "You are already a member of this group"
+          });
+        }
+
+        // Add member to group
+        const result = await groupCollection.updateOne(
+          { _id: new ObjectId(groupId) },
+          {
+            $push: {
+              members: {
+                userEmail,
+                userName,
+                joinedAt: new Date()
+              }
+            }
+          }
+        );
+
+        if (result.modifiedCount === 1) {
+          res.json({
+            success: true,
+            message: "Successfully joined the group"
+          });
+        } else {
+          res.status(400).json({
+            success: false,
+            error: "Failed to join group"
+          });
+        }
+
+      } catch (error) {
+        console.error("Error joining group:", error);
+        res.status(500).json({
+          success: false,
+          error: "Internal server error"
+        });
+      }
+    });
+
+
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
