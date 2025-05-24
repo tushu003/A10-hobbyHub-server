@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
-const { ObjectId } = require('mongodb');
+const { ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -74,25 +74,99 @@ async function run() {
       }
     });
 
-    //delete group
-    app.delete("/delete-group/:id", async (req, res) => {
+    // my group
+
+    // Get groups by user email
+    // app.get("/my-groups", async (req, res) => {
+    //   try {
+    //     const email = req.query.email;
+
+    //     if (!email) {
+    //       return res.status(400).json({ error: "Email is required" });
+    //     }
+
+    //     const result = await groupCollection.find({ userEmail: email }).toArray();
+    //     res.status(200).json(result);
+    //   } catch (error) {
+    //     console.error("Error fetching user groups:", error.message);
+    //     res.status(500).json({ error: "Internal server error" });
+    //   }
+    // });
+
+    // update group
+    app.put("/update-group/:id", async (req, res) => {
       try {
         const groupId = req.params.id;
-        const result = await groupCollection.deleteOne({ _id: new ObjectId(groupId) });
+        
+        // First get the existing group
+        const existingGroup = await groupCollection.findOne({ _id: new ObjectId(groupId) });
+        
+        if (!existingGroup) {
+          return res.status(404).json({ error: "Group not found" });
+        }
+
+        // Prepare update data while preserving existing fields
+        const updatedData = {
+          ...existingGroup,
+          ...req.body,
+          _id: new ObjectId(groupId), // Ensure _id remains unchanged
+          startDate: new Date(req.body.startDate || existingGroup.startDate),
+          endDate: new Date(req.body.endDate || existingGroup.endDate),
+          maxMembers: parseInt(req.body.maxMembers || existingGroup.maxMembers),
+          updatedAt: new Date() // Add update timestamp
+        };
+
+        // Remove _id from update operation
+        delete updatedData._id;
+
+        const result = await groupCollection.updateOne(
+          { _id: new ObjectId(groupId) },
+          { $set: updatedData }
+        );
+
+        if (result.modifiedCount === 1) {
+          res.json({
+            success: true,
+            message: "Group updated successfully"
+          });
+        } else {
+          res.status(400).json({
+            success: false,
+            error: "Failed to update group"
+          });
+        }
+
+      } catch (error) {
+        console.error("Error updating group:", error);
+        res.status(500).json({
+          success: false,
+          error: "Internal server error"
+        });
+      }
+    });
+
+    //delete group
+    app.delete("/delete-group/:id", async (req, res) => {
+      console.log("Deleting group with ID:", req.params.id);
+
+      try {
+        const groupId = req.params.id;
+        const result = await groupCollection.deleteOne({
+          _id: new ObjectId(groupId),
+        });
 
         if (result.deletedCount === 0) {
           return res.status(404).json({
             error: "Group not found",
           });
         }
-      }
-      catch (error) {
+      } catch (error) {
         console.error("Error deleting group:", error);
         res.status(500).json({
           error: "Internal server error",
         });
       }
-    })
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
